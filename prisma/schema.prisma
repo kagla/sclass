@@ -1,0 +1,587 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// AUTH MODELS
+// ============================================
+
+enum Role {
+  ADMIN
+  TEACHER
+  PARENT
+  STUDENT
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role      @default(STUDENT)
+  isActive      Boolean   @default(true)
+  phone         String?
+
+  accounts Account[]
+  sessions Session[]
+
+  teacher  Teacher?
+  student  Student?
+  parent   Parent?
+
+  posts    Post[]
+  comments Comment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// ACADEMY
+// ============================================
+
+model Academy {
+  id              String  @id @default(cuid())
+  name            String
+  address         String?
+  detailAddress   String?
+  phone           String?
+  fax             String?
+  email           String?
+  logoUrl         String?
+  description     String? @db.Text
+  operatingHours  String? @db.Text
+  visionStatement String? @db.Text
+
+  teachers      Teacher[]
+  students      Student[]
+  parents       Parent[]
+  subjects      Subject[]
+  classrooms    Classroom[]
+  boards        Board[]
+  feeStructures FeeStructure[]
+  mealPlans     MealPlan[]
+  stories       SuccessStory[]
+  consultations Consultation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("academies")
+}
+
+// ============================================
+// PEOPLE
+// ============================================
+
+model Teacher {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  academyId       String
+  bio             String?   @db.Text
+  specialization  String?
+  profileImageUrl String?
+  salary          Decimal?  @db.Decimal(10, 0)
+  hireDate        DateTime?
+  isActive        Boolean   @default(true)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade)
+
+  teacherSubjects TeacherSubject[]
+  schedules       Schedule[]
+  grades          Grade[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("teachers")
+}
+
+model Student {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  academyId       String
+  grade           String?
+  school          String?
+  profileImageUrl String?
+  enrollDate      DateTime?
+  isActive        Boolean   @default(true)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade)
+
+  enrollments    Enrollment[]
+  studentParents StudentParent[]
+  attendances    Attendance[]
+  grades         Grade[]
+  subscriptions  Subscription[]
+  payments       Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("students")
+}
+
+model Parent {
+  id           String  @id @default(cuid())
+  userId       String  @unique
+  academyId    String
+  relationship String?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade)
+
+  studentParents StudentParent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("parents")
+}
+
+model StudentParent {
+  id        String @id @default(cuid())
+  studentId String
+  parentId  String
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parent  Parent  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, parentId])
+  @@map("student_parents")
+}
+
+// ============================================
+// SUBJECTS & SCHEDULES
+// ============================================
+
+model Subject {
+  id          String  @id @default(cuid())
+  academyId   String
+  name        String
+  description String? @db.Text
+  level       String?
+  maxStudents Int?
+  isActive    Boolean @default(true)
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade)
+
+  teacherSubjects TeacherSubject[]
+  enrollments     Enrollment[]
+  schedules       Schedule[]
+  feeStructures   FeeStructure[]
+  grades          Grade[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subjects")
+}
+
+model TeacherSubject {
+  id        String @id @default(cuid())
+  teacherId String
+  subjectId String
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, subjectId])
+  @@map("teacher_subjects")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  DROPPED
+  COMPLETED
+}
+
+model Enrollment {
+  id         String           @id @default(cuid())
+  studentId  String
+  subjectId  String
+  status     EnrollmentStatus @default(ACTIVE)
+  enrolledAt DateTime         @default(now())
+  droppedAt  DateTime?
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, subjectId])
+  @@map("enrollments")
+}
+
+model Classroom {
+  id        String  @id @default(cuid())
+  academyId String
+  name      String
+  capacity  Int?
+  floor     String?
+
+  academy   Academy    @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  schedules Schedule[]
+
+  @@map("classrooms")
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model Schedule {
+  id          String    @id @default(cuid())
+  subjectId   String
+  teacherId   String
+  classroomId String?
+  dayOfWeek   DayOfWeek
+  startTime   String
+  endTime     String
+  isActive    Boolean   @default(true)
+
+  subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacher   Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classroom Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+
+  attendances Attendance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("schedules")
+}
+
+// ============================================
+// ATTENDANCE & GRADES
+// ============================================
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  studentId  String
+  scheduleId String
+  date       DateTime         @db.Date
+  status     AttendanceStatus @default(PRESENT)
+  note       String?
+
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, scheduleId, date])
+  @@map("attendances")
+}
+
+model Grade {
+  id       String   @id @default(cuid())
+  studentId String
+  subjectId String
+  teacherId String
+  examName  String
+  score     Decimal  @db.Decimal(5, 2)
+  maxScore  Decimal  @db.Decimal(5, 2) @default(100)
+  comment   String?  @db.Text
+  examDate  DateTime @db.Date
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("grades")
+}
+
+// ============================================
+// PAYMENTS & SUBSCRIPTIONS
+// ============================================
+
+model FeeStructure {
+  id        String  @id @default(cuid())
+  academyId String
+  subjectId String
+  name      String
+  amount    Decimal @db.Decimal(10, 0)
+  period    String?
+  isActive  Boolean @default(true)
+
+  academy       Academy        @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  subject       Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("fee_structures")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+model Subscription {
+  id              String             @id @default(cuid())
+  studentId       String
+  feeStructureId  String
+  customerUid     String             @unique
+  status          SubscriptionStatus @default(ACTIVE)
+  startDate       DateTime
+  endDate         DateTime?
+  nextPaymentDate DateTime?
+  pausedAt        DateTime?
+  cancelledAt     DateTime?
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  feeStructure FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Cascade)
+  payments     Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  VIRTUAL_ACCOUNT
+  SUBSCRIPTION
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  studentId      String
+  subscriptionId String?
+  merchantUid    String        @unique
+  impUid         String?       @unique
+  amount         Decimal       @db.Decimal(10, 0)
+  status         PaymentStatus @default(PENDING)
+  method         PaymentMethod @default(CARD)
+  paidAt         DateTime?
+  failReason     String?       @db.Text
+  receiptUrl     String?
+  description    String?
+
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payments")
+}
+
+// ============================================
+// BOARD SYSTEM
+// ============================================
+
+enum BoardType {
+  NOTICE
+  PARENT
+  INQUIRY
+}
+
+model Board {
+  id        String    @id @default(cuid())
+  academyId String
+  name      String
+  type      BoardType
+  isActive  Boolean   @default(true)
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  posts   Post[]
+
+  @@map("boards")
+}
+
+model Post {
+  id        String  @id @default(cuid())
+  boardId   String
+  authorId  String
+  title     String
+  content   String  @db.LongText
+  isPinned  Boolean @default(false)
+  isPublic  Boolean @default(true)
+  viewCount Int     @default(0)
+
+  board    Board           @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  author   User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  files    FileAttachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([boardId, createdAt(sort: Desc)])
+  @@map("posts")
+}
+
+model Comment {
+  id       String  @id @default(cuid())
+  postId   String
+  authorId String
+  content  String  @db.Text
+  parentId String?
+
+  post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("comments")
+}
+
+model FileAttachment {
+  id           String  @id @default(cuid())
+  postId       String?
+  storyId      String?
+  fileName     String
+  originalName String
+  filePath     String
+  fileSize     Int
+  mimeType     String
+
+  post  Post?         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  story SuccessStory? @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("file_attachments")
+}
+
+// ============================================
+// ADDITIONAL FEATURES
+// ============================================
+
+model MealPlan {
+  id        String   @id @default(cuid())
+  academyId String
+  weekStart DateTime @db.Date
+  meals     String   @db.LongText
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade)
+
+  @@unique([academyId, weekStart])
+  @@map("meal_plans")
+}
+
+model SuccessStory {
+  id          String  @id @default(cuid())
+  academyId   String
+  studentName String
+  title       String
+  content     String  @db.LongText
+  imageUrl    String?
+  university  String?
+  year        Int?
+  isPublished Boolean @default(false)
+
+  academy Academy          @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  files   FileAttachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("success_stories")
+}
+
+enum ConsultationStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model Consultation {
+  id           String             @id @default(cuid())
+  academyId    String
+  parentName   String
+  studentName  String
+  phone        String
+  password     String
+  email        String?
+  studentGrade String?
+  subject      String?
+  message      String?            @db.Text
+  status       ConsultationStatus @default(PENDING)
+  adminNote    String?            @db.Text
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("consultations")
+}
